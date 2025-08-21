@@ -2,7 +2,7 @@ import { ref, onMounted, onUnmounted } from 'vue';
 
 export function useWebSocket(url) {
     const socket = ref(null);
-    const message = ref(null);
+    const message = ref({});
     const isConnected = ref(false);
     const error = ref(null);
 
@@ -16,7 +16,7 @@ export function useWebSocket(url) {
         };
 
         socket.value.onmessage = (event) => {
-            message.value = event.data;
+            message.value = JSON.parse(event.data);
         };
 
         socket.value.onerror = (err) => {

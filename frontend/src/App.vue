@@ -1,7 +1,10 @@
 <script setup>
+import { ref, watch } from 'vue';
+import Chart from './components/Chart.vue';
 import { useWebSocket } from './composable/useWebSocket';
 
 const { message, isConnected, send } = useWebSocket('wss://ws.bitstamp.net');
+const data = ref([]);
 
 const sendSubscribeMessage = () => {
     send(JSON.stringify({
@@ -20,6 +23,15 @@ const sendUnsubscribeMessage = () => {
         }
     }));
 };
+
+watch(message, (newValue, oldValue) => {
+    if (newValue.event === 'data') {
+        data.value = newValue.data.bids.reverse().concat(newValue.data.asks).map(item => ({
+            name: item[0],
+            value: item[1]
+        }))
+    }
+});
 </script>
 
 <template>
@@ -28,7 +40,7 @@ const sendUnsubscribeMessage = () => {
         <p v-else>Disconnected from WebSocket</p>
         <button @click="sendSubscribeMessage">sendSubscribeMessage</button>
         <button @click="sendUnsubscribeMessage">sendUnsubscribeMessage</button>
-        <div >{{ message }}</div>
+        <Chart :data="data" />
     </div>
 </template>
 
