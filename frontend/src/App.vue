@@ -1,11 +1,35 @@
-<script setup></script>
+<script setup>
+import { useWebSocket } from './composable/useWebSocket';
+
+const { message, isConnected, send } = useWebSocket('wss://ws.bitstamp.net');
+
+const sendSubscribeMessage = () => {
+    send(JSON.stringify({
+        "event": "bts:subscribe",
+        "data": {
+            "channel": "order_book_btceur"
+        }
+    }));
+};
+
+const sendUnsubscribeMessage = () => {
+    send(JSON.stringify({
+        "event": "bts:unsubscribe",
+        "data": {
+            "channel": "order_book_btceur"
+        }
+    }));
+};
+</script>
 
 <template>
-  <h1>You did it!</h1>
-  <p>
-    Visit <a href="https://vuejs.org/" target="_blank" rel="noopener">vuejs.org</a> to read the
-    documentation
-  </p>
+    <div>
+        <p v-if="isConnected">Connected to WebSocket</p>
+        <p v-else>Disconnected from WebSocket</p>
+        <button @click="sendSubscribeMessage">sendSubscribeMessage</button>
+        <button @click="sendUnsubscribeMessage">sendUnsubscribeMessage</button>
+        <div >{{ message }}</div>
+    </div>
 </template>
 
 <style scoped></style>
