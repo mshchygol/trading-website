@@ -7,8 +7,7 @@ const chartContainer = ref(null);
 let svg, x, y, width, height;
 
 
-watch(() => props.data, (newValue, oldValue) => {
-    console.log('Chart data prop updated')
+watch(() => props.data, (newValue) => {
     if (!svg && newValue?.length > 0) {
         drawChart()
     } else if (svg) {

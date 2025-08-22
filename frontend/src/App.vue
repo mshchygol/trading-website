@@ -5,6 +5,7 @@ import { useWebSocket } from './composable/useWebSocket';
 
 const { message, isConnected, send } = useWebSocket('wss://ws.bitstamp.net');
 const data = ref([]);
+let throttling = 0;
 
 const sendSubscribeMessage = () => {
     send(JSON.stringify({
@@ -24,18 +25,22 @@ const sendUnsubscribeMessage = () => {
     }));
 };
 
-watch(message, (newValue, oldValue) => {
+watch(message, (newValue) => {
     if (newValue.event === 'data') {
-        data.value = newValue.data.bids.reverse().concat(newValue.data.asks).map(item => ({
-            name: item[0],
-            value: item[1]
-        }))
+        throttling++;
+        if (throttling % 2 === 0) {
+            data.value = newValue.data.bids.reverse().concat(newValue.data.asks).map(item => ({
+                name: item[0],
+                value: item[1]
+            }))
+        }
     }
 });
 </script>
 
 <template>
     <div>
+        <p>Unorthodox trading website</p>
         <p v-if="isConnected">Connected to WebSocket</p>
         <p v-else>Disconnected from WebSocket</p>
         <button @click="sendSubscribeMessage">sendSubscribeMessage</button>
