@@ -28,3 +28,41 @@ coverage
 *.sw?
 
 *.tsbuildinfo
+
+# User-specific files
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# User-specific files (MonoDevelop/Xamarin Studio)
+*.userprefs
+
+# Mono auto generated files
+mono_crash.*
+
+# Build results
+[Dd]ebug/
+[Rr]elease/
+[Bb]in/
+[Oo]bj/
+*.log
+*.pfx
+*.vspscc
+*.vssscc
+*.buildscc
+*.pidb
+*.scc
+
+# NuGet packages
+packages/
+*.nupkg
+.nuget/
+
+# DotNet tools
+.config/dotnet-tools.json
+
+# Resharper
+*.DotSettings
+*.DotSettings.user
