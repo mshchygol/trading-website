@@ -44,7 +44,7 @@ export function useWebSocket(url) {
         }
     };
 
-    // onMounted(connect);
+    onMounted(connect);
     onUnmounted(close);
 
     return {

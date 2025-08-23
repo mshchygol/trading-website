@@ -43,7 +43,8 @@ app.Map("/ws/orderbook", async context =>
 
     var clientSocket = await context.WebSockets.AcceptWebSocketAsync();
     var cts = new CancellationTokenSource();
-    Console.WriteLine($"[WS] New connection established: {context.Connection.Id}");
+    var clientId = Guid.NewGuid();
+    Console.WriteLine($"[WS] New connection established: {context.Connection.Id} ({clientId})");
 
     if (!exchangeWorker.IsRunning)
     {
@@ -51,10 +52,10 @@ app.Map("/ws/orderbook", async context =>
         _ = exchangeWorker.StartAsync();
     }
 
-    var channel = OrderBookBroadcaster.Subscribe();
+    var channel = OrderBookBroadcaster.Subscribe(clientId);
     decimal? requestedBtcAmount = null;
 
-    // Task: worker → frontend
+    // worker → frontend
     var sendTask = Task.Run(async () =>
     {
         try
@@ -93,7 +94,7 @@ app.Map("/ws/orderbook", async context =>
         catch (OperationCanceledException) { }
     });
 
-    // Task: frontend → server
+    // frontend → server
     var receiveTask = Task.Run(async () =>
     {
         var buffer = new byte[2048];
@@ -140,7 +141,8 @@ app.Map("/ws/orderbook", async context =>
         finally
         {
             cts.Cancel();
-            Console.WriteLine($"[WS] Connection closed: {context.Connection.Id}");
+            OrderBookBroadcaster.Unsubscribe(clientId); // ✅ unsubscribe here
+            Console.WriteLine($"[WS] Connection closed: {context.Connection.Id} ({clientId})");
             await clientSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closed by server", CancellationToken.None);
         }
     });
@@ -153,12 +155,31 @@ app.Run();
 // ----------------- Broadcaster -----------------
 public static class OrderBookBroadcaster
 {
-    private static readonly Channel<string> _channel = Channel.CreateUnbounded<string>();
+    private static readonly ConcurrentDictionary<Guid, Channel<string>> _subscribers = new();
 
-    public static ChannelReader<string> Subscribe() => _channel.Reader;
+    public static ChannelReader<string> Subscribe(Guid id)
+    {
+        var channel = Channel.CreateUnbounded<string>();
+        _subscribers[id] = channel;
+        Console.WriteLine($"[Broadcaster] Subscriber {id} added.");
+        return channel.Reader;
+    }
+
+    public static void Unsubscribe(Guid id)
+    {
+        if (_subscribers.TryRemove(id, out var channel))
+        {
+            channel.Writer.Complete();
+            Console.WriteLine($"[Broadcaster] Subscriber {id} removed.");
+        }
+    }
+
     public static void Publish(string msg)
     {
-        _channel.Writer.TryWrite(msg);
+        foreach (var kvp in _subscribers.Values)
+        {
+            kvp.Writer.TryWrite(msg);
+        }
         AuditLog.Add(msg);
     }
 }

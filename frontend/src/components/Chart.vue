@@ -1,11 +1,14 @@
 <script setup>
-import { ref, watch } from "vue";
+import { onMounted, ref, watch } from "vue";
 import * as d3 from 'd3';
 
 const props = defineProps(['data'])
 const chartContainer = ref(null);
 let svg, x, y, width, height;
 
+onMounted(() => {
+    drawChart()
+})
 
 watch(() => props.data, (newValue) => {
     if (!svg && newValue?.length > 0) {
