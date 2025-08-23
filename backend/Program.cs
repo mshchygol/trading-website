@@ -3,6 +3,7 @@ using System.Text;
 using System.Threading.Channels;
 using System.Collections.Concurrent;
 using System.Text.Json;
+using System.Globalization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -39,6 +40,12 @@ app.MapGet("/auditlog", () =>
     return Results.Json(log, new JsonSerializerOptions { WriteIndented = true });
 });
 
+// ---- JSON options: make property name matching case-insensitive
+JsonSerializerOptions JsonOpts = new JsonSerializerOptions
+{
+    PropertyNameCaseInsensitive = true
+};
+
 // WebSocket endpoint for frontend clients
 app.Map("/ws/orderbook", async context =>
 {
@@ -63,27 +70,74 @@ app.Map("/ws/orderbook", async context =>
     var channel = OrderBookBroadcaster.Subscribe();
     Console.WriteLine("Client subscribed");
 
+    // Per-client requested BTC amount (market buy simulation)
+    decimal? requestedBtcAmount = null;
+
     // Task: send messages from worker → frontend
     var sendTask = Task.Run(async () =>
     {
         try
         {
-            await foreach (var msg in channel.ReadAllAsync(cts.Token))
+            await foreach (var raw in channel.ReadAllAsync(cts.Token))
             {
-                var buffer = Encoding.UTF8.GetBytes(msg);
+                BitstampEnvelope? envelope = null;
+                try
+                {
+                    envelope = JsonSerializer.Deserialize<BitstampEnvelope>(raw, JsonOpts);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("⚠️ JSON parse error: " + ex.Message);
+                    continue; // skip malformed frame
+                }
+
+                // We only forward real order book updates
+                if (envelope?.Event is null ||
+                    !envelope.Event.Equals("data", StringComparison.OrdinalIgnoreCase) ||
+                    envelope.Data is null)
+                {
+                    continue;
+                }
+
+                object payload;
+
+                if (requestedBtcAmount is decimal buy && buy > 0)
+                {
+                    var eurCost = QuoteCalculator.CalculateQuote(envelope.Data, buy);
+
+                    payload = new
+                    {
+                        bids = envelope.Data.bids,
+                        asks = envelope.Data.asks,
+                        quote = new
+                        {
+                            btcAmount = buy,
+                            eurCost = eurCost,       // -1 if not enough liquidity
+                            success = eurCost >= 0
+                        }
+                    };
+                }
+                else
+                {
+                    payload = envelope.Data; // send plain orderbook until user asks for quote
+                }
+
+                var json = JsonSerializer.Serialize(payload);
+                var buffer = Encoding.UTF8.GetBytes(json);
                 await clientSocket.SendAsync(buffer, WebSocketMessageType.Text, true, cts.Token);
             }
         }
-        catch
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
         {
-            Console.WriteLine("❌ Send loop ended");
+            Console.WriteLine("❌ Send loop error: " + ex.Message);
         }
     });
 
     // Task: receive messages from frontend → server
     var receiveTask = Task.Run(async () =>
     {
-        var buffer = new byte[1024];
+        var buffer = new byte[2048];
         try
         {
             while (clientSocket.State == WebSocketState.Open)
@@ -97,17 +151,44 @@ app.Map("/ws/orderbook", async context =>
                 }
 
                 var msg = Encoding.UTF8.GetString(buffer, 0, result.Count);
+
                 if (msg.Equals("close", StringComparison.OrdinalIgnoreCase))
                 {
                     Console.WriteLine("❌ Frontend requested stop (\"close\" msg)");
                     await exchangeWorker.StopAsync();
                     break;
                 }
+
+                // Accept JSON like: { "buyAmount": 0.5 }  (you can also send strings)
+                try
+                {
+                    using var doc = JsonDocument.Parse(msg);
+                    if (doc.RootElement.TryGetProperty("buyAmount", out var amt))
+                    {
+                        if (amt.ValueKind == JsonValueKind.String &&
+                            decimal.TryParse(amt.GetString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var d1))
+                        {
+                            requestedBtcAmount = d1;
+                        }
+                        else if (amt.ValueKind == JsonValueKind.Number &&
+                                 amt.TryGetDecimal(out var d2))
+                        {
+                            requestedBtcAmount = d2;
+                        }
+
+                        Console.WriteLine($"✅ Client requested BTC quote for {requestedBtcAmount} BTC");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"⚠️ Unknown client message: {msg} ({ex.Message})");
+                }
             }
         }
-        catch
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
         {
-            Console.WriteLine("❌ Receive loop ended");
+            Console.WriteLine("❌ Receive loop error: " + ex.Message);
         }
         finally
         {
@@ -181,30 +262,43 @@ public class ExchangeIngestWorker
         """;
         await _ws.SendAsync(Encoding.UTF8.GetBytes(subscribe), WebSocketMessageType.Text, true, _cts.Token);
 
-        var buffer = new byte[8192];
-
         Console.WriteLine("✅ Exchange worker started");
 
         try
         {
+            // Receive loop (collect full messages in case of fragmentation)
+            var buffer = new byte[8192];
             while (_ws.State == WebSocketState.Open && !_cts.IsCancellationRequested)
             {
-                var result = await _ws.ReceiveAsync(buffer, _cts.Token);
-                if (result.MessageType == WebSocketMessageType.Close)
+                using var ms = new MemoryStream();
+                WebSocketReceiveResult? result;
+
+                do
                 {
-                    Console.WriteLine("❌ Exchange closed");
-                    break;
+                    result = await _ws.ReceiveAsync(buffer, _cts.Token);
+                    if (result.MessageType == WebSocketMessageType.Close)
+                    {
+                        Console.WriteLine("❌ Exchange closed");
+                        return;
+                    }
+
+                    ms.Write(buffer, 0, result.Count);
                 }
+                while (!result.EndOfMessage);
 
-                var json = Encoding.UTF8.GetString(buffer, 0, result.Count);
-                var transformed = Transform(json);
+                var json = Encoding.UTF8.GetString(ms.ToArray());
 
-                OrderBookBroadcaster.Publish(transformed);
+                // publish raw Bitstamp envelope; filtering is done in the endpoint
+                OrderBookBroadcaster.Publish(json);
             }
         }
         catch (OperationCanceledException)
         {
             Console.WriteLine("⚠️ Exchange worker stopped");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("❌ Exchange worker error: " + ex.Message);
         }
     }
 
@@ -231,6 +325,49 @@ public class ExchangeIngestWorker
 
     private string Transform(string raw)
     {
+        // Left as-is; we filter in the endpoint.
         return raw;
+    }
+}
+
+// ----------------- Models (case-insensitive deserialization enabled above) -----------------
+public class BitstampEnvelope
+{
+    public string? Event { get; set; }           // "data", "bts:heartbeat", etc.
+    public BitstampOrderBookData? Data { get; set; }
+}
+
+public class BitstampOrderBookData
+{
+    public List<List<string>>? bids { get; set; } = new(); // [["price","amount"], ...]
+    public List<List<string>>? asks { get; set; } = new();
+}
+
+// ----------------- Quote Calculator -----------------
+public static class QuoteCalculator
+{
+    public static decimal CalculateQuote(BitstampOrderBookData book, decimal btcAmount)
+    {
+        if (book.asks is null || book.asks.Count == 0) return -1m;
+
+        decimal remaining = btcAmount;
+        decimal totalCost = 0m;
+
+        foreach (var level in book.asks)
+        {
+            if (level.Count < 2) continue;
+
+            // Bitstamp sends prices and sizes as strings using '.' decimal separator
+            if (!decimal.TryParse(level[0], NumberStyles.Any, CultureInfo.InvariantCulture, out var price)) continue;
+            if (!decimal.TryParse(level[1], NumberStyles.Any, CultureInfo.InvariantCulture, out var size)) continue;
+
+            var take = Math.Min(remaining, size);
+            totalCost += take * price;
+            remaining -= take;
+
+            if (remaining <= 0) break;
+        }
+
+        return remaining > 0 ? -1m : totalCost;
     }
 }

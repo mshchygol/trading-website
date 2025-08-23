@@ -7,6 +7,10 @@ const { message, isConnected, send, close, connect } = useWebSocket('ws://localh
 const data = ref([]);
 let throttling = 0;
 
+function sendAmount() {
+    send(JSON.stringify({"buyAmount": Math.random()}))
+}
+
 async function getAuditLog() {
     try {
         const response = await fetch('http://localhost:5263/auditlog');
@@ -21,14 +25,12 @@ async function getAuditLog() {
 }
 
 watch(message, (newValue) => {
-    if (newValue.event === 'data') {
-        throttling++;
-        if (throttling % 2 === 0) {
-            data.value = newValue.data.bids.reverse().concat(newValue.data.asks).map(item => ({
-                name: item[0],
-                value: item[1]
-            }))
-        }
+    throttling++;
+    if (throttling % 2 === 0) {
+        data.value = newValue.bids.reverse().concat(newValue.asks).map(item => ({
+            name: item[0],
+            value: item[1]
+        }))
     }
 });
 </script>
@@ -41,6 +43,7 @@ watch(message, (newValue) => {
         <button @click="connect">open socket connection</button>
         <button @click="close">close socket connection</button>
         <button @click="getAuditLog">get audit log</button>
+        <button @click="sendAmount">send amount</button>
         <Chart :data="data" />
     </div>
 </template>
