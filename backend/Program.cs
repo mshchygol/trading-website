@@ -1,21 +1,16 @@
 using System.Net.WebSockets;
 using System.Text;
-using System.Threading.Channels;
-using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Globalization;
+using System.Threading.Channels;
+using System.Collections.Concurrent;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddCors(options =>
 {
-    options.AddDefaultPolicy(
-        policy =>
-        {
-            policy.WithOrigins("http://localhost:5173")
-                .AllowAnyHeader()
-                .AllowAnyMethod();
-        });
+    options.AddDefaultPolicy(policy =>
+        policy.WithOrigins("http://localhost:5173").AllowAnyHeader().AllowAnyMethod());
 });
 
 var app = builder.Build();
@@ -23,34 +18,23 @@ var app = builder.Build();
 app.UseWebSockets();
 app.UseCors();
 
-app.MapGet("/", () => "Hello World!!!!!");
+app.MapGet("/", () => "Hello World!");
 
 // Shared worker instance
 var exchangeWorker = new ExchangeIngestWorker();
 
 app.MapGet("/auditlog", () =>
-{
-    var log = AuditLog.GetAll()
-        .Select(entry => new
-        {
-            timestamp = entry.Timestamp,
-            snapshot = entry.Snapshot
-        });
+    Results.Json(
+        AuditLog.GetAll().Select(x => new { timestamp = x.Timestamp, snapshot = x.Snapshot }),
+        new JsonSerializerOptions { WriteIndented = true }
+    )
+);
 
-    return Results.Json(log, new JsonSerializerOptions { WriteIndented = true });
-});
+var jsonOpts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
 
-// ---- JSON options: make property name matching case-insensitive
-JsonSerializerOptions JsonOpts = new JsonSerializerOptions
-{
-    PropertyNameCaseInsensitive = true
-};
-
-// WebSocket endpoint for frontend clients
+// WebSocket endpoint for frontend
 app.Map("/ws/orderbook", async context =>
 {
-    Console.WriteLine("Frontend connected to /ws/orderbook");
-
     if (!context.WebSockets.IsWebSocketRequest)
     {
         context.Response.StatusCode = 400;
@@ -59,82 +43,57 @@ app.Map("/ws/orderbook", async context =>
 
     var clientSocket = await context.WebSockets.AcceptWebSocketAsync();
     var cts = new CancellationTokenSource();
+    Console.WriteLine($"[WS] New connection established: {context.Connection.Id}");
 
-    // Start worker if not already running
     if (!exchangeWorker.IsRunning)
     {
+        Console.WriteLine("[Worker] Starting ExchangeIngestWorker...");
         _ = exchangeWorker.StartAsync();
     }
 
-    // Subscribe this client to updates
     var channel = OrderBookBroadcaster.Subscribe();
-    Console.WriteLine("Client subscribed");
-
-    // Per-client requested BTC amount (market buy simulation)
     decimal? requestedBtcAmount = null;
 
-    // Task: send messages from worker → frontend
+    // Task: worker → frontend
     var sendTask = Task.Run(async () =>
     {
         try
         {
             await foreach (var raw in channel.ReadAllAsync(cts.Token))
             {
-                BitstampEnvelope? envelope = null;
-                try
+                BitstampEnvelope? env;
+                try { env = JsonSerializer.Deserialize<BitstampEnvelope>(raw, jsonOpts); }
+                catch
                 {
-                    envelope = JsonSerializer.Deserialize<BitstampEnvelope>(raw, JsonOpts);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine("⚠️ JSON parse error: " + ex.Message);
-                    continue; // skip malformed frame
-                }
-
-                // We only forward real order book updates
-                if (envelope?.Event is null ||
-                    !envelope.Event.Equals("data", StringComparison.OrdinalIgnoreCase) ||
-                    envelope.Data is null)
-                {
+                    Console.WriteLine("[WS] Failed to deserialize BitstampEnvelope");
                     continue;
                 }
 
-                object payload;
+                if (env?.Event?.Equals("data", StringComparison.OrdinalIgnoreCase) != true || env.Data == null)
+                    continue;
 
-                if (requestedBtcAmount is decimal buy && buy > 0)
-                {
-                    var eurCost = QuoteCalculator.CalculateQuote(envelope.Data, buy);
-
-                    payload = new
+                object payload = requestedBtcAmount is decimal buy && buy > 0
+                    ? new
                     {
-                        bids = envelope.Data.bids,
-                        asks = envelope.Data.asks,
+                        bids = env.Data.bids,
+                        asks = env.Data.asks,
                         quote = new
                         {
                             btcAmount = buy,
-                            eurCost = eurCost,       // -1 if not enough liquidity
-                            success = eurCost >= 0
+                            eurCost = QuoteCalculator.CalculateQuote(env.Data, buy),
+                            success = QuoteCalculator.CalculateQuote(env.Data, buy) >= 0
                         }
-                    };
-                }
-                else
-                {
-                    payload = envelope.Data; // send plain orderbook until user asks for quote
-                }
+                    }
+                    : env.Data;
 
-                var json = JsonSerializer.Serialize(payload);
-                var buffer = Encoding.UTF8.GetBytes(json);
+                var buffer = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(payload));
                 await clientSocket.SendAsync(buffer, WebSocketMessageType.Text, true, cts.Token);
             }
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex)
-        {
-            Console.WriteLine("❌ Send loop error: " + ex.Message);
-        }
     });
 
-    // Task: receive messages from frontend → server
+    // Task: frontend → server
     var receiveTask = Task.Run(async () =>
     {
         var buffer = new byte[2048];
@@ -143,56 +102,45 @@ app.Map("/ws/orderbook", async context =>
             while (clientSocket.State == WebSocketState.Open)
             {
                 var result = await clientSocket.ReceiveAsync(buffer, cts.Token);
-
-                if (result.MessageType == WebSocketMessageType.Close)
-                {
-                    Console.WriteLine("❌ Frontend requested close (WS close)");
-                    break;
-                }
+                if (result.MessageType == WebSocketMessageType.Close) break;
 
                 var msg = Encoding.UTF8.GetString(buffer, 0, result.Count);
-
                 if (msg.Equals("close", StringComparison.OrdinalIgnoreCase))
                 {
-                    Console.WriteLine("❌ Frontend requested stop (\"close\" msg)");
+                    Console.WriteLine($"[WS] Client {context.Connection.Id} requested close.");
                     await exchangeWorker.StopAsync();
                     break;
                 }
 
-                // Accept JSON like: { "buyAmount": 0.5 }  (you can also send strings)
                 try
                 {
                     using var doc = JsonDocument.Parse(msg);
                     if (doc.RootElement.TryGetProperty("buyAmount", out var amt))
                     {
-                        if (amt.ValueKind == JsonValueKind.String &&
-                            decimal.TryParse(amt.GetString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var d1))
+                        decimal? parsed = amt.ValueKind switch
                         {
-                            requestedBtcAmount = d1;
-                        }
-                        else if (amt.ValueKind == JsonValueKind.Number &&
-                                 amt.TryGetDecimal(out var d2))
-                        {
-                            requestedBtcAmount = d2;
-                        }
+                            JsonValueKind.String when decimal.TryParse(amt.GetString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var d1) => d1,
+                            JsonValueKind.Number when amt.TryGetDecimal(out var d2) => d2,
+                            _ => null
+                        };
 
-                        Console.WriteLine($"✅ Client requested BTC quote for {requestedBtcAmount} BTC");
+                        if (parsed is decimal p)
+                        {
+                            requestedBtcAmount = p;
+                            Console.WriteLine($"[WS] Client {context.Connection.Id} provided buyAmount: {p} BTC");
+                        }
                     }
                 }
-                catch (Exception ex)
+                catch
                 {
-                    Console.WriteLine($"⚠️ Unknown client message: {msg} ({ex.Message})");
+                    Console.WriteLine("[WS] Failed to parse client message.");
                 }
             }
-        }
-        catch (OperationCanceledException) { }
-        catch (Exception ex)
-        {
-            Console.WriteLine("❌ Receive loop error: " + ex.Message);
         }
         finally
         {
             cts.Cancel();
+            Console.WriteLine($"[WS] Connection closed: {context.Connection.Id}");
             await clientSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closed by server", CancellationToken.None);
         }
     });
@@ -205,15 +153,13 @@ app.Run();
 // ----------------- Broadcaster -----------------
 public static class OrderBookBroadcaster
 {
-    private static readonly Channel<string> _channel =
-        Channel.CreateUnbounded<string>(new UnboundedChannelOptions { SingleWriter = false, SingleReader = false });
+    private static readonly Channel<string> _channel = Channel.CreateUnbounded<string>();
 
     public static ChannelReader<string> Subscribe() => _channel.Reader;
-
     public static void Publish(string msg)
     {
         _channel.Writer.TryWrite(msg);
-        AuditLog.Add(msg); // ✅ also log snapshot
+        AuditLog.Add(msg);
     }
 }
 
@@ -225,122 +171,93 @@ public static class AuditLog
     public static void Add(string snapshot)
     {
         _log.Enqueue((DateTime.UtcNow, snapshot));
-
-        // Keep only last 50
         while (_log.Count > 50 && _log.TryDequeue(out _)) { }
     }
 
-    public static IReadOnlyCollection<(DateTime Timestamp, string Snapshot)> GetAll()
-    {
-        return _log.ToArray();
-    }
+    public static IReadOnlyCollection<(DateTime Timestamp, string Snapshot)> GetAll() => _log.ToArray();
 }
 
 // ----------------- Exchange Worker -----------------
 public class ExchangeIngestWorker
 {
-    private readonly Uri _exchangeUri = new("wss://ws.bitstamp.net");
+    private readonly Uri _uri = new("wss://ws.bitstamp.net");
     private ClientWebSocket? _ws;
     private CancellationTokenSource? _cts;
 
-    public bool IsRunning => _ws != null && _ws.State == WebSocketState.Open;
+    public bool IsRunning => _ws?.State == WebSocketState.Open;
 
     public async Task StartAsync()
     {
-        if (IsRunning) return; // Already running
+        if (IsRunning) return;
 
         _ws = new ClientWebSocket();
         _cts = new CancellationTokenSource();
-
-        await _ws.ConnectAsync(_exchangeUri, _cts.Token);
+        await _ws.ConnectAsync(_uri, _cts.Token);
+        Console.WriteLine("[Worker] Connected to Bitstamp WebSocket.");
 
         var subscribe = """
-        {
-          "event": "bts:subscribe",
-          "data": { "channel": "order_book_btceur" }
-        }
+        { "event": "bts:subscribe", "data": { "channel": "order_book_btceur" } }
         """;
         await _ws.SendAsync(Encoding.UTF8.GetBytes(subscribe), WebSocketMessageType.Text, true, _cts.Token);
+        Console.WriteLine("[Worker] Subscribed to order_book_btceur.");
 
-        Console.WriteLine("✅ Exchange worker started");
-
+        var buffer = new byte[8192];
         try
         {
-            // Receive loop (collect full messages in case of fragmentation)
-            var buffer = new byte[8192];
             while (_ws.State == WebSocketState.Open && !_cts.IsCancellationRequested)
             {
                 using var ms = new MemoryStream();
-                WebSocketReceiveResult? result;
-
+                WebSocketReceiveResult result;
                 do
                 {
                     result = await _ws.ReceiveAsync(buffer, _cts.Token);
-                    if (result.MessageType == WebSocketMessageType.Close)
-                    {
-                        Console.WriteLine("❌ Exchange closed");
-                        return;
-                    }
-
+                    if (result.MessageType == WebSocketMessageType.Close) return;
                     ms.Write(buffer, 0, result.Count);
-                }
-                while (!result.EndOfMessage);
+                } while (!result.EndOfMessage);
 
-                var json = Encoding.UTF8.GetString(ms.ToArray());
-
-                // publish raw Bitstamp envelope; filtering is done in the endpoint
-                OrderBookBroadcaster.Publish(json);
+                var rawMsg = Encoding.UTF8.GetString(ms.ToArray());
+                OrderBookBroadcaster.Publish(rawMsg);
             }
-        }
-        catch (OperationCanceledException)
-        {
-            Console.WriteLine("⚠️ Exchange worker stopped");
         }
         catch (Exception ex)
         {
-            Console.WriteLine("❌ Exchange worker error: " + ex.Message);
+            Console.WriteLine($"[Worker] Error: {ex.Message}");
         }
     }
 
     public async Task StopAsync()
     {
-        if (_ws == null) return;
-
+        Console.WriteLine("[Worker] Stopping...");
         try
         {
             _cts?.Cancel();
-            if (_ws.State == WebSocketState.Open)
-            {
+            if (_ws?.State == WebSocketState.Open)
                 await _ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Stopped by server", CancellationToken.None);
-            }
         }
-        catch { }
-
-        _ws.Dispose();
-        _ws = null;
-        _cts = null;
-
-        Console.WriteLine("✅ Exchange worker stopped and cleaned up");
-    }
-
-    private string Transform(string raw)
-    {
-        // Left as-is; we filter in the endpoint.
-        return raw;
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Worker] Stop error: {ex.Message}");
+        }
+        finally
+        {
+            _ws?.Dispose();
+            _ws = null;
+            _cts = null;
+            Console.WriteLine("[Worker] Stopped.");
+        }
     }
 }
 
-// ----------------- Models (case-insensitive deserialization enabled above) -----------------
+// ----------------- Models -----------------
 public class BitstampEnvelope
 {
-    public string? Event { get; set; }           // "data", "bts:heartbeat", etc.
+    public string? Event { get; set; }
     public BitstampOrderBookData? Data { get; set; }
 }
-
 public class BitstampOrderBookData
 {
-    public List<List<string>>? bids { get; set; } = new(); // [["price","amount"], ...]
-    public List<List<string>>? asks { get; set; } = new();
+    public List<List<string>> bids { get; set; } = new();
+    public List<List<string>> asks { get; set; } = new();
 }
 
 // ----------------- Quote Calculator -----------------
@@ -348,26 +265,26 @@ public static class QuoteCalculator
 {
     public static decimal CalculateQuote(BitstampOrderBookData book, decimal btcAmount)
     {
-        if (book.asks is null || book.asks.Count == 0) return -1m;
+        if (book.asks.Count == 0) return -1m;
 
-        decimal remaining = btcAmount;
-        decimal totalCost = 0m;
-
-        foreach (var level in book.asks)
+        decimal remaining = btcAmount, cost = 0;
+        foreach (var lvl in book.asks)
         {
-            if (level.Count < 2) continue;
-
-            // Bitstamp sends prices and sizes as strings using '.' decimal separator
-            if (!decimal.TryParse(level[0], NumberStyles.Any, CultureInfo.InvariantCulture, out var price)) continue;
-            if (!decimal.TryParse(level[1], NumberStyles.Any, CultureInfo.InvariantCulture, out var size)) continue;
+            if (lvl.Count < 2 ||
+                !decimal.TryParse(lvl[0], NumberStyles.Any, CultureInfo.InvariantCulture, out var price) ||
+                !decimal.TryParse(lvl[1], NumberStyles.Any, CultureInfo.InvariantCulture, out var size)) continue;
 
             var take = Math.Min(remaining, size);
-            totalCost += take * price;
+            cost += take * price;
             remaining -= take;
-
             if (remaining <= 0) break;
         }
 
-        return remaining > 0 ? -1m : totalCost;
+        if (remaining > 0)
+        {
+            return -1m;
+        }
+
+        return cost;
     }
 }
