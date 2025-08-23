@@ -1,7 +1,7 @@
 <script setup></script>
 
 <template>
-    <p>Unorthodox trading website</p>
+    <h1>Unorthodox trading website</h1>
     <nav>
         <RouterLink to="/">Go to Home</RouterLink>
         <RouterLink to="/audit-log">Go to audit log</RouterLink>

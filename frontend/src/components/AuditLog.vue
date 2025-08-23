@@ -25,8 +25,10 @@ function selectSnapshot(snapshot) {
     <div>
         <p>audit log</p>
         <Chart :data="chartData"/>
+        <p v-if="isLoading">Loading....</p>
+        <p v-if="error">Got error! {{ error }}</p>
         <ul>
-            <li v-for="value in auditlog" @click="selectSnapshot(value.snapshot)">Snapshot taken on: {{ value.timestamp }}</li>
+            <li v-for="value in auditlog" @click="selectSnapshot(value.snapshot)">Snapshot saved on: {{ value.timestamp }}</li>
         </ul>
     </div>
 </template>
