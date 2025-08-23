@@ -7,6 +7,19 @@ const { message, isConnected, send, close, connect } = useWebSocket('ws://localh
 const data = ref([]);
 let throttling = 0;
 
+async function getAuditLog() {
+    try {
+        const response = await fetch('http://localhost:5263/auditlog');
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        console.log(data);
+    } catch (error) {
+        console.error('Fetch error:', error);
+    }
+}
+
 watch(message, (newValue) => {
     if (newValue.event === 'data') {
         throttling++;
@@ -27,6 +40,7 @@ watch(message, (newValue) => {
         <p v-else>Disconnected from WebSocket</p>
         <button @click="connect">open socket connection</button>
         <button @click="close">close socket connection</button>
+        <button @click="getAuditLog">get audit log</button>
         <Chart :data="data" />
     </div>
 </template>

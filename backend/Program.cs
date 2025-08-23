@@ -1,16 +1,43 @@
 using System.Net.WebSockets;
 using System.Text;
 using System.Threading.Channels;
+using System.Collections.Concurrent;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(
+        policy =>
+        {
+            policy.WithOrigins("http://localhost:5173")
+                .AllowAnyHeader()
+                .AllowAnyMethod();
+        });
+});
+
 var app = builder.Build();
 
 app.UseWebSockets();
+app.UseCors();
 
 app.MapGet("/", () => "Hello World!!!!!");
 
 // Shared worker instance
 var exchangeWorker = new ExchangeIngestWorker();
+
+app.MapGet("/auditlog", () =>
+{
+    var log = AuditLog.GetAll()
+        .Select(entry => new
+        {
+            timestamp = entry.Timestamp,
+            snapshot = entry.Snapshot
+        });
+
+    return Results.Json(log, new JsonSerializerOptions { WriteIndented = true });
+});
 
 // WebSocket endpoint for frontend clients
 app.Map("/ws/orderbook", async context =>
@@ -101,7 +128,31 @@ public static class OrderBookBroadcaster
         Channel.CreateUnbounded<string>(new UnboundedChannelOptions { SingleWriter = false, SingleReader = false });
 
     public static ChannelReader<string> Subscribe() => _channel.Reader;
-    public static void Publish(string msg) => _channel.Writer.TryWrite(msg);
+
+    public static void Publish(string msg)
+    {
+        _channel.Writer.TryWrite(msg);
+        AuditLog.Add(msg); // ✅ also log snapshot
+    }
+}
+
+// ----------------- Audit Log -----------------
+public static class AuditLog
+{
+    private static readonly ConcurrentQueue<(DateTime Timestamp, string Snapshot)> _log = new();
+
+    public static void Add(string snapshot)
+    {
+        _log.Enqueue((DateTime.UtcNow, snapshot));
+
+        // Keep only last 50
+        while (_log.Count > 50 && _log.TryDequeue(out _)) { }
+    }
+
+    public static IReadOnlyCollection<(DateTime Timestamp, string Snapshot)> GetAll()
+    {
+        return _log.ToArray();
+    }
 }
 
 // ----------------- Exchange Worker -----------------
@@ -180,7 +231,6 @@ public class ExchangeIngestWorker
 
     private string Transform(string raw)
     {
-        // TODO: transform json if needed
         return raw;
     }
 }
