@@ -8,6 +8,7 @@ const router = createRouter({
         { path: '/', component: OrderBook },
         { path: '/audit-log', component: AuditLog },
     ],
+    linkActiveClass: 'bg-green-700 text-white rounded-t-lg'
 })
 
 export default router

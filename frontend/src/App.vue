@@ -1,14 +1,16 @@
 <script setup></script>
 
 <template>
-    <h1>Unorthodox trading website</h1>
-    <nav>
-        <RouterLink to="/">Go to Home</RouterLink>
-        <RouterLink to="/audit-log">Go to audit log</RouterLink>
-    </nav>
-    <main>
+    <main class="p-12">
+        <h1 class="text-3xl my-4">Unorthodox trading website</h1>
+        <nav class="border-b-2 border-green-700 mb-4 text-lg">
+            <RouterLink class="p-2 inline-block" to="/">Order book</RouterLink>
+            <RouterLink to="/audit-log" class="ml-4 p-2 inline-block">Audit log</RouterLink>
+        </nav>
         <RouterView />
     </main>
 </template>
 
-<style scoped></style>
+<style>
+@import "tailwindcss";
+</style>
