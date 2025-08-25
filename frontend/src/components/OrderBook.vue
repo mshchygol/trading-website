@@ -46,9 +46,22 @@ watch(message, (newValue) => {
         <h2 v-else class="text-lg">Disconnected from WebSocket</h2>
         <div class="my-4">
             <label for="amount" class="block text-lg mb-2">Check the price for desired amount:</label>
-            <input type="number" id="amount" v-model="buyAmount" placeholder="Your amount" class="border border-gray-300 rounded-md px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring focus:ring-blue-500 focus:border-blue-500"></input>
-            <button type="button" :disabled="buttonDisabled" class="ml-4 bg-green-700 hover:bg-green-600 text-white font-bold py-2 px-4 rounded disabled:opacity-75 disabled:bg-gray-400" @click="sendAmount">Show the price</button>
-            <p v-if="quote?.success" class="text-lg pt-2">Average price for {{ quote.btcAmount }} BTC would be: {{ quote.formattedAmount }}</p>
+            <input 
+                type="number" 
+                id="amount" v-model="buyAmount" 
+                placeholder="Your amount" 
+                class="border border-gray-300 rounded-md px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring focus:ring-blue-500 focus:border-blue-500">
+            </input>
+            <button 
+                type="button" 
+                :disabled="buttonDisabled" 
+                class="ml-4 bg-green-700 hover:bg-green-600 text-white font-bold py-2 px-4 rounded disabled:opacity-75 disabled:bg-gray-400" 
+                @click="sendAmount">
+                Show the price
+            </button>
+            <p v-if="quote?.success" class="text-lg pt-2">
+                Average price for <strong>{{ quote.btcAmount }}</strong> BTC would be: <strong>{{ quote.formattedAmount }}</strong>
+            </p>
         </div>
         <Chart :data="data" />
         <p v-if="error">Got error: {{ error.type }}</p>

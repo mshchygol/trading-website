@@ -2,6 +2,7 @@
 import { useFetch } from '@/composable/useFetch';
 import Chart from './Chart.vue';
 import { computed, ref } from 'vue';
+import { formatDate } from '@/utils';
 
 const chartData = ref([]);
 const { data, isLoading, error } = useFetch('http://localhost:5263/auditlog');
@@ -19,21 +20,6 @@ function selectSnapshot({snapshot, index}) {
         name: item[0],
         value: item[1]
     }))
-}
-
-function formatDate(date) {
-    const pad = (num, size = 2) => String(num).padStart(size, '0');
-
-    const day = pad(date.getDate());
-    const month = pad(date.getMonth() + 1);
-    const year = date.getFullYear();
-
-    const hours = pad(date.getHours());
-    const minutes = pad(date.getMinutes());
-    const seconds = pad(date.getSeconds());
-    const milliseconds = pad(date.getMilliseconds(), 3);
-
-    return `${day}.${month}.${year} ${hours}:${minutes}:${seconds}:${milliseconds}`;
 }
 
 </script>
