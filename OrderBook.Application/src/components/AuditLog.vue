@@ -3,9 +3,10 @@ import { useFetch } from '@/composable/useFetch';
 import Chart from './Chart.vue';
 import { computed, ref } from 'vue';
 import { formatDate } from '@/utils';
+// import { meta } from 'eslint-plugin-vue';
 
 const chartData = ref([]);
-const { data, isLoading, error } = useFetch('http://localhost:5263/auditlog');
+const { data, isLoading, error } = useFetch(`${import.meta.env.VITE_API_URL}/auditlog`);
 const auditlog = computed(() => {
     return data?.value 
     ? data.value.map((item, index) => ({snapshot: item.snapshot, timestamp: formatDate(new Date(item.timestamp)), index})).reverse() 
@@ -32,6 +33,7 @@ function selectSnapshot({snapshot, index}) {
         <p v-if="error">Got error! {{ error }}</p>
         <ul>
             <li v-for="value in auditlog" 
+                :key="auditlog.index"
                 class="p-2 transition-all cursor-pointer hover:bg-gray-700 hover:text-white" 
                 :class="{'bg-gray-200': value.index === selectedSnapshotIndex}"
                 @click="selectSnapshot(value)"

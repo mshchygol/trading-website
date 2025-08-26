@@ -6,11 +6,12 @@ using System.Threading.Channels;
 using System.Collections.Concurrent;
 
 var builder = WebApplication.CreateBuilder(args);
+var frontendAppUrl = builder.Configuration["AppSettings:FrontendAppUrl"]!;
 
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
-        policy.WithOrigins("http://localhost:5173").AllowAnyHeader().AllowAnyMethod());
+        policy.WithOrigins(frontendAppUrl).AllowAnyHeader().AllowAnyMethod());
 });
 
 var app = builder.Build();
@@ -21,7 +22,7 @@ app.UseCors();
 app.MapGet("/", () => "Hello World!");
 
 // Shared worker instance
-var exchangeWorker = new ExchangeIngestWorker();
+var exchangeWorker = new ExchangeIngestWorker(builder);
 
 app.MapGet("/auditlog", () =>
     Results.Json(
@@ -199,9 +200,9 @@ public static class AuditLog
 }
 
 // ----------------- Exchange Worker -----------------
-public class ExchangeIngestWorker
+public class ExchangeIngestWorker(WebApplicationBuilder builder)
 {
-    private readonly Uri _uri = new("wss://ws.bitstamp.net");
+    private readonly Uri _uri = new(builder.Configuration["AppSettings:BitstampWSUrl"]!);
     private ClientWebSocket? _ws;
     private CancellationTokenSource? _cts;
 

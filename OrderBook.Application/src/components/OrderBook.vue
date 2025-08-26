@@ -3,8 +3,9 @@ import { computed, ref, watch } from 'vue';
 import { useWebSocket } from '../composable/useWebSocket';
 import Chart from './Chart.vue';
 import { formatMoney } from '@/utils';
+// import { meta } from 'eslint-plugin-vue';
 
-const { message, isConnected, send, error } = useWebSocket('ws://localhost:5263/ws/orderbook');
+const { message, isConnected, send, error } = useWebSocket(`${import.meta.env.VITE_WS_URL}/ws/orderbook`);
 const data = ref([]);
 const buyAmount = ref(null);
 const quote = ref(null);
