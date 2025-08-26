@@ -1,10 +1,10 @@
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, type Ref } from 'vue';
 
-export function useWebSocket(url) {
-    const socket = ref(null);
-    const message = ref({});
+export function useWebSocket<T = unknown>(url: string) {
+    const socket: Ref<WebSocket | null> = ref(null);
+    const message: Ref<T | null> = ref(null);
     const isConnected = ref(false);
-    const error = ref(null);
+    const error: Ref<Event | Error | null> = ref(null);
 
     const connect = () => {
         socket.value = new WebSocket(url);
@@ -15,11 +15,16 @@ export function useWebSocket(url) {
             console.log('WebSocket connected');
         };
 
-        socket.value.onmessage = (event) => {
-            message.value = JSON.parse(event.data);
+        socket.value.onmessage = (event: MessageEvent) => {
+            try {
+                message.value = JSON.parse(event?.data) as T;
+            } catch (err) {
+                console.error('Failed to parse WebSocket message:', err);
+                error.value = err instanceof Error ? err : new Error(String(err));
+            }
         };
 
-        socket.value.onerror = (err) => {
+        socket.value.onerror = (err: Event) => {
             error.value = err;
             console.error('WebSocket error:', err);
         };
@@ -30,9 +35,9 @@ export function useWebSocket(url) {
         };
     };
 
-    const send = (message) => {
+    const send = (msg: string | ArrayBufferLike | Blob | ArrayBufferView) => {
         if (socket.value && isConnected.value) {
-            socket.value.send(message);
+            socket.value.send(msg);
         } else {
             console.warn('WebSocket not connected. Cannot send message.');
         }
@@ -54,6 +59,6 @@ export function useWebSocket(url) {
         error,
         send,
         close,
-        connect
+        connect,
     };
 }

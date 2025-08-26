@@ -1,0 +1,23 @@
+{
+    "extends": "@vue/tsconfig/tsconfig.json",
+    "include": [
+        "env.d.ts",
+        "src/**/*",
+        "src/**/*.vue"
+    ],
+    "exclude": [
+        "dist",
+        "node_modules"
+    ],
+    "compilerOptions": {
+        "composite": true,
+        "module": "ESNext",
+        "moduleResolution": "Node",
+        "baseUrl": ".",
+        "paths": {
+            "@/*": [
+                "src/*"
+            ]
+        }
+    }
+}

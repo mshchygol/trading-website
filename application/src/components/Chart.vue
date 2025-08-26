@@ -1,11 +1,19 @@
-<script setup>
+<script setup lang="ts">
 import { onMounted, ref, watch } from "vue";
 import * as d3 from "d3";
 import { formatMoney } from "@/utils";
+import type { ChartDataItem } from "@/interfaces";
 
-const props = defineProps(["data"]);
-const chartContainer = ref(null);
-let svg, x, y, width, height, tooltip;
+const props = defineProps<{ data: ChartDataItem[] }>();
+
+const chartContainer = ref<HTMLDivElement | null>(null);
+
+let svg: d3.Selection<SVGGElement, unknown, null, undefined>;
+let x: d3.ScaleLinear<number, number>;
+let y: d3.ScaleLinear<number, number>;
+let width: number;
+let height: number;
+let tooltip: d3.Selection<HTMLDivElement, unknown, null, undefined>;
 
 onMounted(() => {
     drawChart();
@@ -24,8 +32,8 @@ watch(
 
 function drawChart() {
     const margin = { top: 20, right: 40, bottom: 40, left: 40 };
-        width = document.documentElement.clientWidth - margin.left - margin.right;
-        height = 400 - margin.top - margin.bottom;
+    width = document.documentElement.clientWidth - margin.left - margin.right;
+    height = 400 - margin.top - margin.bottom;
 
     svg = d3
         .select(chartContainer.value)
@@ -38,12 +46,12 @@ function drawChart() {
     // scales
     x = d3
         .scaleLinear()
-        .domain(d3.extent(props.data, (d) => +d.name)) // min → max price
+        .domain(d3.extent(props.data, (d) => d.name) as [number, number])
         .range([0, width]);
 
     y = d3
         .scaleLinear()
-        .domain([0, d3.max(props.data, (d) => d.value)])
+        .domain([0, d3.max(props.data, (d) => d.value) ?? 0])
         .nice()
         .range([height, 0]);
 
@@ -77,13 +85,13 @@ function drawChart() {
 
 function updateChart() {
     // update scales
-    x.domain(d3.extent(props.data, (d) => +d.name));
-    y.domain([0, d3.max(props.data, (d) => d.value)]).nice();
+    x.domain(d3.extent(props.data, (d) => d.name) as [number, number]);
+    y.domain([0, d3.max(props.data, (d) => d.value) ?? 0]).nice();
 
     const bars = svg
         .select(".bars")
-        .selectAll(".bar")
-        .data(props.data, (d) => d.name);
+        .selectAll<SVGRectElement, ChartDataItem>(".bar")
+        .data(props.data, (d) => d.name.toString());
 
     const midIndex = Math.floor(props.data.length / 2);
     const barWidth = Math.max(1, width / props.data.length);
@@ -95,14 +103,13 @@ function updateChart() {
         .attr("class", "bar")
         .attr("x", (d) => x(d.name))
         .attr("width", barWidth)
-        .attr("fill", (d, i) => (i < midIndex ? "green" : "red"))
+        .attr("fill", (_, i) => (i < midIndex ? "green" : "red"))
         .attr("y", y(0))
         .attr("height", 0)
-        // tooltip events
         .on("mouseover", function (event, d) {
             tooltip.style("opacity", 1).html(
                 `Price: ${formatMoney(d.name)}<br/>Amount: ${d.value} BTC`
-        );
+            );
         })
         .on("mousemove", function (event) {
             tooltip
@@ -112,21 +119,22 @@ function updateChart() {
         .on("mouseout", function () {
             tooltip.style("opacity", 0);
         })
-        .merge(bars) // ENTER + UPDATE
+        // ENTER + UPDATE
+        .merge(bars as any)
         .transition()
         .duration(200)
         .attr("x", (d) => x(d.name))
         .attr("y", (d) => y(d.value))
         .attr("width", barWidth)
         .attr("height", (d) => height - y(d.value))
-        .attr("fill", (d, i) => (i < midIndex ? "green" : "red"));
+        .attr("fill", (_, i) => (i < midIndex ? "green" : "red"));
 
     // EXIT
     bars.exit().remove();
 
     // update axes
-    svg.select(".x-axis").transition().duration(200).call(d3.axisBottom(x));
-    svg.select(".y-axis").transition().duration(200).call(d3.axisLeft(y));
+    svg.select(".x-axis").transition().duration(200).call(d3.axisBottom(x) as any);
+    svg.select(".y-axis").transition().duration(200).call(d3.axisLeft(y) as any);
 }
 </script>
 
