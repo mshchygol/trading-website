@@ -45,7 +45,7 @@ function selectSnapshot({ snapshot, index }: SnapshotValue) {
         <Chart :data="chartData" />
         <p v-if="isLoading">Loading....</p>
         <p v-if="error">Got error! {{ error }}</p>
-        <p v-if="!isLoading && chartData.length === 0" class="my-4">No snapshots yet...</p>
+        <p v-if="!isLoading && auditlog.length === 0" class="my-4">No snapshots yet...</p>
         <ul>
             <li
                 v-for="value in auditlog"
