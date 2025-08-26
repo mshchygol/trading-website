@@ -10,6 +10,12 @@ A simple **SPA** built with **Vue 3 (frontend)** and **.NET 9 (backend)** that v
 - ⚡ Fast and lightweight SPA setup  
 - 🖥️ Backend in .NET with WebSocket broadcasting  
 
+### Order book chart example:
+<img width="2557" height="1234" alt="Screenshot 2025-08-26 180808" src="https://github.com/user-attachments/assets/1e84b088-c383-48d4-9890-d94e0ada9837" />
+
+### Audit log example:
+<img width="2559" height="1230" alt="Screenshot 2025-08-26 180951" src="https://github.com/user-attachments/assets/78d063da-41d2-4656-a802-fe725c00723d" />
+
 ---
 
 ## 🛠️ Tech Stack
