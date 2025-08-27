@@ -1,8 +1,6 @@
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Routing;
-using YourApp.Endpoints;
+using TradingApp.Endpoints;
 
-namespace YourApp.Extensions;
+namespace TradingApp.Extensions;
 
 public static class EndpointRouteBuilderExtensions
 {
@@ -13,10 +11,6 @@ public static class EndpointRouteBuilderExtensions
     {
         // Order book endpoints
         app.MapOrderBookEndpoints();
-
-        // You can add other endpoint groups here in the future:
-        // app.MapHealthCheckEndpoints();
-        // app.MapUserEndpoints();
 
         return app;
     }

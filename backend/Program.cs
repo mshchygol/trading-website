@@ -1,6 +1,7 @@
 
-using YourApp.Extensions;
-using YourApp.Services;
+using TradingApp.Endpoints;
+using TradingApp.Extensions;
+using TradingApp.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,13 +15,13 @@ builder.Services.AddCors(options =>
         policy.WithOrigins(frontendAppUrl).AllowAnyHeader().AllowAnyMethod());
 });
 builder.Services.AddSingleton<ExchangeIngestWorker>();
+builder.Services.AddSingleton<OrderBookBroadcaster>();
+builder.Services.AddSingleton<IOrderBookWebSocketHandler, OrderBookWebSocketHandler>();
 
 var app = builder.Build();
 
 app.UseCors();
 app.UseWebSockets();
-
-app.MapGet("/", () => "Hello World!");
 
 // Register endpoints via extension
 app.MapAppEndpoints();

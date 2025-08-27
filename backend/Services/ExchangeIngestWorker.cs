@@ -1,7 +1,7 @@
 using System.Net.WebSockets;
 using System.Text;
 
-namespace YourApp.Services;
+namespace TradingApp.Services;
 
 public class ExchangeIngestWorker
 {
@@ -10,10 +10,15 @@ public class ExchangeIngestWorker
     private CancellationTokenSource? _cts;
 
     public bool IsRunning => _ws?.State == WebSocketState.Open;
+    private readonly ILogger<ExchangeIngestWorker> _logger;
+    private readonly OrderBookBroadcaster _broadcaster;
 
-    public ExchangeIngestWorker(IConfiguration config)
+
+    public ExchangeIngestWorker(IConfiguration config, ILogger<ExchangeIngestWorker> logger, OrderBookBroadcaster broadcaster)
     {
         _uri = new Uri(config["AppSettings:BitstampWSUrl"]!);
+        _logger = logger;
+        _broadcaster = broadcaster;
     }
 
     public async Task StartAsync()
@@ -23,7 +28,7 @@ public class ExchangeIngestWorker
         _ws = new ClientWebSocket();
         _cts = new CancellationTokenSource();
         await _ws.ConnectAsync(_uri, _cts.Token);
-        Console.WriteLine("[Worker] Connected to Bitstamp WebSocket.");
+        _logger.LogInformation("[Worker] Connected to Bitstamp WebSocket.");
 
         var subscribe = """
         { "event": "bts:subscribe", "data": { "channel": "order_book_btceur" } }
@@ -45,18 +50,18 @@ public class ExchangeIngestWorker
                 } while (!result.EndOfMessage);
 
                 var rawMsg = Encoding.UTF8.GetString(ms.ToArray());
-                OrderBookBroadcaster.Publish(rawMsg);
+                _broadcaster.Publish(rawMsg);
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[Worker] Error: {ex.Message}");
+            _logger.LogError($"[Worker] Error: {ex.Message}");
         }
     }
 
     public async Task StopAsync()
     {
-        Console.WriteLine("[Worker] Stopping...");
+        _logger.LogInformation("[Worker] Stopping...");
         try
         {
             _cts?.Cancel();
@@ -68,7 +73,7 @@ public class ExchangeIngestWorker
             _ws?.Dispose();
             _ws = null;
             _cts = null;
-            Console.WriteLine("[Worker] Stopped.");
+            _logger.LogInformation("[Worker] Stopped.");
         }
     }
 }

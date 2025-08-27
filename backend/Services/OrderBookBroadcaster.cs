@@ -1,30 +1,37 @@
 using System.Collections.Concurrent;
 using System.Threading.Channels;
+using Microsoft.Extensions.Logging;
 
-namespace YourApp.Services;
+namespace TradingApp.Services;
 
-public static class OrderBookBroadcaster
+public class OrderBookBroadcaster
 {
-    private static readonly ConcurrentDictionary<Guid, Channel<string>> _subscribers = new();
+    private readonly ILogger<OrderBookBroadcaster> _logger;
+    private readonly ConcurrentDictionary<Guid, Channel<string>> _subscribers = new();
 
-    public static ChannelReader<string> Subscribe(Guid id)
+    public OrderBookBroadcaster(ILogger<OrderBookBroadcaster> logger)
+    {
+        _logger = logger;
+    }
+
+    public ChannelReader<string> Subscribe(Guid id)
     {
         var channel = Channel.CreateUnbounded<string>();
         _subscribers[id] = channel;
-        Console.WriteLine($"[Broadcaster] Subscriber {id} added.");
+        _logger.LogInformation("[Broadcaster] Subscriber {Id} added.", id);
         return channel.Reader;
     }
 
-    public static void Unsubscribe(Guid id)
+    public void Unsubscribe(Guid id)
     {
         if (_subscribers.TryRemove(id, out var channel))
         {
             channel.Writer.Complete();
-            Console.WriteLine($"[Broadcaster] Subscriber {id} removed.");
+            _logger.LogInformation("[Broadcaster] Subscriber {Id} removed.", id);
         }
     }
 
-    public static void Publish(string msg)
+    public void Publish(string msg)
     {
         foreach (var channel in _subscribers.Values)
             channel.Writer.TryWrite(msg);

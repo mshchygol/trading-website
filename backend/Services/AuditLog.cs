@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 
-namespace YourApp.Services;
+namespace TradingApp.Services;
 
 public static class AuditLog
 {

@@ -1,7 +1,7 @@
 using System.Globalization;
-using YourApp.Models;
+using TradingApp.Models;
 
-namespace YourApp.Services;
+namespace TradingApp.Services;
 
 public static class QuoteCalculator
 {
