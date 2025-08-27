@@ -30,6 +30,26 @@ watch(
     }
 );
 
+function getAggregatedData(data: ChartDataItem[]): ChartDataItem[] {
+    if (!data || data.length === 0) return [];
+
+    const parsed = data.map(d => ({ name: Number(d.name), value: Number(d.value) || 0 }));
+
+    const midIndex = Math.floor(parsed.length / 2);
+    const bids = parsed.slice(0, midIndex).reverse();
+    const asks = parsed.slice(midIndex);
+
+    let bidSum = 0;
+    const cumBids = bids.map(d => ({ name: d.name, value: (bidSum += d.value) })).reverse();
+
+    let askSum = 0;
+    const cumAsks = asks.map(d => ({ name: d.name, value: (askSum += d.value) }));
+
+    return [...cumBids, ...cumAsks];
+}
+
+
+
 function drawChart() {
     const margin = { top: 20, right: 40, bottom: 40, left: 40 };
     width = document.documentElement.clientWidth - margin.left - margin.right;
@@ -84,17 +104,19 @@ function drawChart() {
 }
 
 function updateChart() {
+    const aggregated = getAggregatedData(props.data);
+
     // update scales
-    x.domain(d3.extent(props.data, (d) => d.name) as [number, number]);
-    y.domain([0, d3.max(props.data, (d) => d.value) ?? 0]).nice();
+    x.domain(d3.extent(aggregated, (d) => d.name) as [number, number]);
+    y.domain([0, d3.max(aggregated, (d) => d.value) ?? 0]).nice();
 
     const bars = svg
         .select(".bars")
         .selectAll<SVGRectElement, ChartDataItem>(".bar")
-        .data(props.data, (d) => d.name.toString());
+        .data(aggregated, (d) => d.name.toString());
 
-    const midIndex = Math.floor(props.data.length / 2);
-    const barWidth = Math.max(1, width / props.data.length);
+    const midIndex = Math.floor(aggregated.length / 2);
+    const barWidth = Math.max(1, width / aggregated.length);
 
     // ENTER
     bars
@@ -108,7 +130,7 @@ function updateChart() {
         .attr("height", 0)
         .on("mouseover", function (event, d) {
             tooltip.style("opacity", 1).html(
-                `Price: ${formatMoney(d.name)}<br/>Amount: ${d.value} BTC`
+                `Price: ${formatMoney(d.name)}<br/>Cumulative: ${d.value} BTC`
             );
         })
         .on("mousemove", function (event) {
