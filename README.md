@@ -1,5 +1,5 @@
 # Trading-website
-A simple **SPA** built with **Vue 3 (frontend)** and **.NET 9 (backend)** that visualizes a real-time **order book chart** (bids in green, asks in red). Data is streamed via **WebSockets** and displayed with **D3.js**.
+A simple **SPA** built with **Nuxt + Vue 3 (frontend)** and **.NET 9 (backend)** that visualizes a real-time **order book chart** (bids in green, asks in red). Data is streamed via **WebSockets** and displayed with **D3.js**.
 
 ---
 
@@ -19,7 +19,7 @@ A simple **SPA** built with **Vue 3 (frontend)** and **.NET 9 (backend)** that v
 ---
 
 ## 🛠️ Tech Stack
-- **Frontend:** Vue 3 + Vite + D3.js  
+- **Frontend:** Nuxt + Vue 3 + D3.js  
 - **Backend:** ASP.NET Core (.NET 9) + WebSockets  
 
 ## ⚙️ Installation
@@ -37,7 +37,7 @@ dotnet restore
 dotnet run
 ```
 
-### 3. Frontend Setup (Vue 3 + Vite)
+### 3. Frontend Setup (Nuxt + Vue 3)
 ```sh
 cd application
 npm install
