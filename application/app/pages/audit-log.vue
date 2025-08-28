@@ -1,9 +1,10 @@
 <script setup lang="ts">
 const chartData = ref<ChartDataItem[]>([])
 
+const AUDIT_LOG_ENDPOINT = "/auditlog";
 const { data, isLoading, error } = useFetchUrl<AuditLogItem[]>(
-    `${import.meta.env.VITE_API_URL}/auditlog`
-)
+    `${import.meta.env.VITE_API_URL}${AUDIT_LOG_ENDPOINT}`
+);
 
 const auditlog = computed<SnapshotValue[]>(() => {
     return data?.value
@@ -14,22 +15,22 @@ const auditlog = computed<SnapshotValue[]>(() => {
                 index,
             }))
             .reverse()
-        : []
+        : [];
 })
 
 const selectedSnapshotIndex = ref<number | null>(null)
 
 function selectSnapshot({ snapshot, index }: SnapshotValue) {
     if (!snapshot) return
-    const parsed: SnapshotData = JSON.parse(snapshot)
-    selectedSnapshotIndex.value = index
+    const parsed: SnapshotData = JSON.parse(snapshot);
+    selectedSnapshotIndex.value = index;
     chartData.value = parsed.data.bids
         .reverse()
         .concat(parsed.data.asks)
         .map((item) => ({
             name: Number(item[0]),
             value: Number(item[1])
-        }))
+        }));
 }
 </script>
 

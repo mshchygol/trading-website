@@ -4,6 +4,14 @@ import * as d3 from "d3";
 const props = defineProps<{ data: ChartDataItem[] }>();
 
 const chartContainer = ref<HTMLDivElement | null>(null);
+const entriesToShow = ref<number>(100);
+
+const CHART_HEIGHT = 400;
+const CHART_MARGIN = 40;
+const TOOLTIP_OFFSET = {
+    left: 10,
+    top: 20
+};
 
 let svg: d3.Selection<SVGGElement, unknown, null, undefined>;
 let x: d3.ScaleLinear<number, number>;
@@ -17,40 +25,56 @@ onMounted(() => {
 });
 
 watch(
-    () => props.data,
-    (newValue) => {
-        if (!svg && newValue?.length > 0) {
+    () => [props.data, entriesToShow.value],
+    () => {
+        if (!svg && props.data?.length > 0) {
             drawChart();
         } else if (svg) {
             updateChart();
         }
-    }
+    },
+    { deep: true }
 );
 
 function getAggregatedData(data: ChartDataItem[]): ChartDataItem[] {
     if (!data || data.length === 0) return [];
 
-    const parsed = data.map(d => ({ name: Number(d.name), value: Number(d.value) || 0 }));
+    const parsed = data.map((d) => ({
+        name: Number(d.name),
+        value: Number(d.value) || 0,
+    }));
 
     const midIndex = Math.floor(parsed.length / 2);
-    const bids = parsed.slice(0, midIndex).reverse();
-    const asks = parsed.slice(midIndex);
+    let bids = parsed.slice(0, midIndex).reverse();
+    let asks = parsed.slice(midIndex);
 
+    // apply limit (both bids and asks)
+    const limit = entriesToShow.value;
+    if (limit > 0 && limit < midIndex) {
+        bids = bids.slice(0, limit);
+        asks = asks.slice(0, limit);
+    }
+
+    // recompute cumulative values
     let bidSum = 0;
-    const cumBids = bids.map(d => ({ name: d.name, value: (bidSum += d.value) })).reverse();
+    const cumBids = bids.map((d) => ({
+        name: d.name,
+        value: (bidSum += d.value),
+    })).reverse();
 
     let askSum = 0;
-    const cumAsks = asks.map(d => ({ name: d.name, value: (askSum += d.value) }));
+    const cumAsks = asks.map((d) => ({
+        name: d.name,
+        value: (askSum += d.value),
+    }));
 
     return [...cumBids, ...cumAsks];
 }
 
-
-
 function drawChart() {
-    const margin = { top: 20, right: 40, bottom: 40, left: 40 };
+    const margin = { top: CHART_MARGIN, right: CHART_MARGIN, bottom: CHART_MARGIN, left: CHART_MARGIN };
     width = document.documentElement.clientWidth - margin.left - margin.right;
-    height = 400 - margin.top - margin.bottom;
+    height = CHART_HEIGHT - margin.top - margin.bottom;
 
     svg = d3
         .select(chartContainer.value)
@@ -126,17 +150,17 @@ function updateChart() {
         .attr("y", y(0))
         .attr("height", 0)
         .on("mouseover", function (event, d) {
-            tooltip.style("opacity", 1).html(
-                `Price: ${formatMoney(d.name)}<br/>Cumulative: ${d.value} BTC`
-            );
+        tooltip
+            .style("opacity", 1)
+            .html(`Price: ${d.name}<br/>Cumulative: ${d.value} BTC`);
         })
         .on("mousemove", function (event) {
-            tooltip
-                .style("left", event.layerX + 10 + "px")
-                .style("top", event.layerY - 20 + "px");
+        tooltip
+            .style("left", event.layerX + TOOLTIP_OFFSET.left + "px")
+            .style("top", event.layerY - TOOLTIP_OFFSET.top + "px");
         })
         .on("mouseout", function () {
-            tooltip.style("opacity", 0);
+        tooltip.style("opacity", 0);
         })
         // ENTER + UPDATE
         .merge(bars as any)
@@ -158,7 +182,21 @@ function updateChart() {
 </script>
 
 <template>
-    <div ref="chartContainer" class="w-full h-[400px] relative"></div>
+    <div>
+        <div class="flex items-center gap-2 my-2">
+            <label for="entries" class="text-lg">Entries to show:</label>
+            <select id="entries" v-model="entriesToShow" class="border rounded px-2 py-1">
+                <option :value="10">10</option>
+                <option :value="20">20</option>
+                <option :value="30">30</option>
+                <option :value="40">40</option>
+                <option :value="60">60</option>
+                <option :value="80">80</option>
+                <option :value="100">All</option>
+            </select>
+        </div>
+        <div ref="chartContainer" class="w-full h-[400px] relative"></div>
+    </div>
 </template>
 
 <style scoped>

@@ -3,17 +3,31 @@ using System.Text;
 
 namespace TradingApp.Services;
 
+/// <summary>
+/// Handles connecting to the Bitstamp WebSocket API,
+/// subscribing to order book updates, and publishing messages
+/// through the <see cref="OrderBookBroadcaster"/>.
+/// </summary>
 public class ExchangeIngestWorker
 {
     private readonly Uri _uri;
     private ClientWebSocket? _ws;
     private CancellationTokenSource? _cts;
 
+    /// <summary>
+    /// Indicates whether the WebSocket connection is currently open.
+    /// </summary>
     public bool IsRunning => _ws?.State == WebSocketState.Open;
+
     private readonly ILogger<ExchangeIngestWorker> _logger;
     private readonly OrderBookBroadcaster _broadcaster;
 
-
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ExchangeIngestWorker"/> class.
+    /// </summary>
+    /// <param name="config">Application configuration containing the WebSocket URL.</param>
+    /// <param name="logger">Logger instance for diagnostic messages.</param>
+    /// <param name="broadcaster">Broadcaster used to publish order book updates.</param>
     public ExchangeIngestWorker(IConfiguration config, ILogger<ExchangeIngestWorker> logger, OrderBookBroadcaster broadcaster)
     {
         _uri = new Uri(config["AppSettings:BitstampWSUrl"]!);
@@ -21,6 +35,11 @@ public class ExchangeIngestWorker
         _broadcaster = broadcaster;
     }
 
+    /// <summary>
+    /// Starts the worker by connecting to the Bitstamp WebSocket API,
+    /// subscribing to the order book channel, and continuously receiving
+    /// and publishing incoming messages.
+    /// </summary>
     public async Task StartAsync()
     {
         if (IsRunning) return;
@@ -59,6 +78,10 @@ public class ExchangeIngestWorker
         }
     }
 
+    /// <summary>
+    /// Stops the worker by closing the WebSocket connection
+    /// and releasing associated resources.
+    /// </summary>
     public async Task StopAsync()
     {
         _logger.LogInformation("[Worker] Stopping...");

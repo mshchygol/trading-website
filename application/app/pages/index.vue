@@ -1,6 +1,7 @@
 <script setup lang="ts">
+const WS_ENDPOINT = "/ws/orderbook";
 const { message, isConnected, send, error } = useWebSocket<WebSocketMessage>(
-    `${import.meta.env.VITE_WS_URL}/ws/orderbook`
+    `${import.meta.env.VITE_WS_URL}${WS_ENDPOINT}`
 );
 
 const data = ref<OrderBookEntry[]>([]);

@@ -1,11 +1,11 @@
 <script setup lang="ts">
-const route = useRoute()
+const route = useRoute();
 
 const linkClass = (path: string) => {
   return route.path === path
     ? "bg-green-700 text-white rounded-t-lg"
     : ""
-}
+};
 </script>
 
 <template>
