@@ -5,6 +5,8 @@ A simple **SPA** built with **Nuxt + Vue 3 (frontend)** and **.NET 9 (backend)**
 
 ## ✨ Features
 - 📊 Interactive bar chart with bids/asks  
+- 🎚️ Adjustable number of entries displayed  
+- 📈 Price range dynamically updates when entries change  
 - 🔄 Live updates via WebSocket  
 - 🖱️ Tooltips on hover for quick info  
 - ⚡ Fast and lightweight SPA setup  
