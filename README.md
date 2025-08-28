@@ -11,10 +11,10 @@ A simple **SPA** built with **Nuxt + Vue 3 (frontend)** and **.NET 9 (backend)**
 - 🖥️ Backend in .NET with WebSocket broadcasting  
 
 ### Order book chart example:
-<img width="2557" height="1234" alt="Screenshot 2025-08-26 180808" src="https://github.com/user-attachments/assets/1e84b088-c383-48d4-9890-d94e0ada9837" />
+<img width="2559" height="1196" alt="Screenshot 2025-08-27 191213" src="https://github.com/user-attachments/assets/547d2ec2-c148-44f6-9c72-99e24798cbbd" />
 
 ### Audit log example:
-<img width="2559" height="1230" alt="Screenshot 2025-08-26 180951" src="https://github.com/user-attachments/assets/78d063da-41d2-4656-a802-fe725c00723d" />
+<img width="2559" height="1221" alt="Screenshot 2025-08-27 191233" src="https://github.com/user-attachments/assets/05d1760d-2231-431c-94dd-6679e1599328" />
 
 ---
 
