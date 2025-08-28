@@ -1,13 +1,7 @@
 <script setup lang="ts">
-import { useFetch } from '@/composable/useFetch'
-import Chart from './Chart.vue'
-import { computed, ref } from 'vue'
-import { formatDate } from '@/utils'
-import type { AuditLogItem, ChartDataItem, SnapshotData, SnapshotValue } from '@/interfaces'
-
 const chartData = ref<ChartDataItem[]>([])
 
-const { data, isLoading, error } = useFetch<AuditLogItem[]>(
+const { data, isLoading, error } = useFetchUrl<AuditLogItem[]>(
     `${import.meta.env.VITE_API_URL}/auditlog`
 )
 

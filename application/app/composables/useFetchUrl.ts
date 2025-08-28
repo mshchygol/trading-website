@@ -1,6 +1,4 @@
-import { ref, type Ref } from 'vue';
-
-export function useFetch<T = unknown>(
+export function useFetchUrl<T = unknown>(
     apiUrl: string,
     options: RequestInit = {}
 ) {

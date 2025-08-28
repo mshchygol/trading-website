@@ -1,10 +1,4 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
-import { useWebSocket } from '../composable/useWebSocket';
-import Chart from './Chart.vue';
-import { formatMoney } from '@/utils';
-import type { WebSocketMessage, OrderBookEntry, Quote } from '@/interfaces';
-
 const { message, isConnected, send, error } = useWebSocket<WebSocketMessage>(
     `${import.meta.env.VITE_WS_URL}/ws/orderbook`
 );

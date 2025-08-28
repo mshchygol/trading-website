@@ -1,8 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from "vue";
 import * as d3 from "d3";
-import { formatMoney } from "@/utils";
-import type { ChartDataItem } from "@/interfaces";
 
 const props = defineProps<{ data: ChartDataItem[] }>();
 
